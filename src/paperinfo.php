@@ -1506,7 +1506,7 @@ class PaperInfo {
                 $prow->_conflict_array_email = $email;
             }
             if ($email) {
-                $result = $this->conf->qe("select paperId, PaperConflict.contactId, conflictType, firstName, lastName, affiliation, email from PaperConflict join ContactInfo using (contactId) where paperId?a", $row_set->paper_ids());
+                $result = $this->conf->qe("select paperId, PaperConflict.contactId, conflictType, firstName, lastName, affiliation, email, disabled from PaperConflict join ContactInfo using (contactId) where paperId?a", $row_set->paper_ids());
             } else {
                 $result = $this->conf->qe("select paperId, contactId, conflictType, '' firstName, '' lastName, '' affiliation, '' email from PaperConflict where paperId?a", $row_set->paper_ids());
             }
@@ -1514,6 +1514,9 @@ class PaperInfo {
                 $row->paperId = (int) $row->paperId;
                 $row->contactId = (int) $row->contactId;
                 $row->conflictType = (int) $row->conflictType;
+                if ($row->disabled !== null) {
+                    $row->disabled = (int) $row->disabled;
+                }
                 $prow = $row_set->get($row->paperId);
                 $prow->_conflict_array[$row->contactId] = $row;
             }

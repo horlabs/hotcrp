@@ -15,6 +15,8 @@ class Author {
     private $_name;
     /** @var ?int */
     public $contactId;
+    /** @var ?int */
+    public $disabled;
     /** @var ?array{string,string,string} */
     private $_deaccents;
     /** @var ?bool */
