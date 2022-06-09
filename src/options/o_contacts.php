@@ -6,6 +6,37 @@ class Contacts_PaperOption extends PaperOption {
     function __construct(Conf $conf, $args) {
         parent::__construct($conf, $args);
     }
+
+    /** @param list<Author> $ca
+     * @param string $email
+     * @return int|false */
+    static function users_search_email($ca, $email) {
+        foreach ($ca as $i => $c) {
+            if (strcasecmp($c->email, $email) === 0)
+                return $i;
+        }
+        return false;
+    }
+
+    /** @param string $email
+     * @return ?Author */
+    function value_by_email(PaperValue $ov, $email) {
+        $ca = $ov->anno("users") ?? [];
+        $i = self::users_search_email($ca, $email);
+        return $i !== false ? $ca[$i] : null;
+    }
+
+    /** @param list<Author> $ca
+     * @param int $uid
+     * @return int|false */
+    static function users_search_uid($ca, $uid) {
+        foreach ($ca as $i => $c) {
+            if ($uid > 0 && $c->contactId === $uid)
+                return $i;
+        }
+        return false;
+    }
+
     function value_force(PaperValue $ov) {
         // $ov->value_list: contact IDs
         // $ov->data_list: emails
@@ -23,19 +54,26 @@ class Contacts_PaperOption extends PaperOption {
         $ov->set_anno("users", array_values($ca));
     }
     function value_unparse_json(PaperValue $ov, PaperStatus $ps) {
-        $ca = [];
-        foreach ($ov->anno("users") ?? [] as $c) {
-            if ($c->contactId >= 0)
-                $ca[$c->contactId] = $c;
+        $ca = $ov->anno("users") ?? [];
+        '@phan-var list<Author> $ca';
+        $j = $need = [];
+        foreach ($ov->value_list() as $i => $cid) {
+            if ($cid > 0
+                && ($vi = self::users_search_uid($ca, $cid)) !== false) {
+                $j[] = $ca[$vi]->unparse_nae_json();
+            } else {
+                $j[] = ["email" => $ov->data_by_index($i)];
+                if ($cid > 0) {
+                    $need[$i] = $cid;
+                }
+            }
         }
-        foreach ($ov->value_list() as $cid) {
-            if (!isset($ca[$cid]))
-                $ps->conf->prefetch_user_by_id($cid);
-        }
-        $j = [];
-        foreach ($ov->value_list() as $cid) {
-            if (($u = $ca[$cid] ?? $ps->conf->cached_user_by_id($cid)))
-                $j[] = Author::unparse_nae_json_for($u);
+        if (!empty($need)) {
+            $ps->conf->prefetch_users_by_id(array_values($need));
+            foreach ($need as $i => $cid) {
+                if (($u = $ps->conf->cached_user_by_id($cid)))
+                    $j[$i] = Author::unparse_nae_json_for($u);
+            }
         }
         return $j;
     }
@@ -48,7 +86,7 @@ class Contacts_PaperOption extends PaperOption {
             }
             if (!$user->allow_administer($ov->prow)
                 && $ov->prow->conflict_type($user) >= CONFLICT_CONTACTAUTHOR
-                && self::ca_index($ov->anno("users"), $user->email) === false) {
+                && self::users_search_email($ov->anno("users"), $user->email) === false) {
                 $ov->error($this->conf->_("<0>You can’t remove yourself from the submission’s contacts"));
                 $ov->msg("<0>(Ask another contact to remove you.)", MessageSet::INFORM);
             }
@@ -59,30 +97,15 @@ class Contacts_PaperOption extends PaperOption {
         $ps->clear_conflict_values(CONFLICT_CONTACTAUTHOR);
         foreach ($ov->anno("users") as $c) {
             $ps->update_conflict_value($c->email, CONFLICT_CONTACTAUTHOR, CONFLICT_CONTACTAUTHOR);
-            if ($c->contactId === 0) {
+            if (($c->contactId ?? 0) === 0) {
                 $ps->register_user($c);
             }
         }
         return true;
     }
-    static function ca_index($ca, $email) {
-        foreach ($ca as $i => $c) {
-            if (strcasecmp($c->email, $email) === 0)
-                return $i;
-        }
-        return false;
-    }
-    /** @param string $email
-     * @return ?Author */
-    function value_by_email(PaperValue $ov, $email) {
-        $ca = $ov->anno("users") ?? [];
-        $i = self::ca_index($ca, $email);
-        return $i !== false ? $ca[$i] : null;
-    }
     static private function apply_new_users(PaperValue $ov, $new_ca, &$ca) {
         $bad_ca = [];
         foreach ($new_ca as $c) {
-            $c->contactId = 0;
             if (validate_email($c->email)) {
                 $ca[] = $c;
             } else {
@@ -97,7 +120,7 @@ class Contacts_PaperOption extends PaperOption {
                 $bad_ca[] = $c;
             }
         }
-        $ov->set_value_data(array_map(function ($c) { return $c->contactId; }, $ca),
+        $ov->set_value_data(array_map(function ($c) { return $c->contactId ?? 0; }, $ca),
                             array_map(function ($c) { return $c->email; }, $ca));
         $ov->set_anno("users", $ca);
         $ov->set_anno("bad_users", $bad_ca);
@@ -111,12 +134,14 @@ class Contacts_PaperOption extends PaperOption {
             $email = trim($qreq["contacts:email_$n"]);
             $name = simplify_whitespace((string) $qreq["contacts:name_$n"]);
             $affiliation = simplify_whitespace((string) $qreq["contacts:affiliation_$n"]);
-            if (($i = self::ca_index($ca, $email)) !== false) {
-                if (!$qreq["contacts:active_$n"]
+            $active = !!$qreq["contacts:active_$n"];
+            if (($i = self::users_search_email($ca, $email)) !== false) {
+                if (!$active
                     && ($ca[$i]->conflictType & CONFLICT_AUTHOR) === 0) {
                     array_splice($ca, $i, 1);
                 }
-            } else if (($email !== "" || $name !== "") && $qreq["contacts:active_$n"]) {
+            } else if (($email !== "" || $name !== "")
+                       && $active) {
                 $new_ca[] = $c = Author::make_keyed(["email" => $email, "name" => $name, "affiliation" => $affiliation]);
                 $c->author_index = $n;
             }
@@ -130,7 +155,7 @@ class Contacts_PaperOption extends PaperOption {
         $new_ca = [];
         if (is_object($j) || is_associative_array($j)) {
             foreach ((array) $j as $k => $v) {
-                $i = self::ca_index($ca, $k);
+                $i = self::users_search_email($ca, $k);
                 if ($v === false) {
                     if ($i !== false
                         && ($ca[$i]->conflictType & CONFLICT_AUTHOR) === 0) {
@@ -159,9 +184,9 @@ class Contacts_PaperOption extends PaperOption {
                 } else {
                     return PaperValue::make_estop($prow, $this, "<0>Validation error");
                 }
-                if (self::ca_index($ca, $email) !== false) {
+                if (self::users_search_email($ca, $email) !== false) {
                     // double mention -- do nothing
-                } else if (($i = self::ca_index($old_ca, $email)) !== false) {
+                } else if (($i = self::users_search_email($old_ca, $email)) !== false) {
                     $ca[] = $old_ca[$i];
                 } else {
                     $a = is_string($v) ? [] : (array) $v;
