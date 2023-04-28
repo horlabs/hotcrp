@@ -41,6 +41,8 @@ class ReviewHistoryInfo implements JsonSerializable {
     public $reviewAuthorNotified;
     /** @var ?int */
     public $reviewEditVersion;  // NB also used to check if `data` was loaded
+    /** @var int */
+    public $reviewFlags;
     /** @var ?string */
     public $revdelta;
 
@@ -74,6 +76,7 @@ class ReviewHistoryInfo implements JsonSerializable {
         $this->reviewNotified = (int) $this->reviewNotified;
         $this->reviewAuthorNotified = (int) $this->reviewAuthorNotified;
         $this->reviewEditVersion = (int) $this->reviewEditVersion;
+        $this->reviewFlags = (int) $this->reviewFlags;
     }
 
     #[\ReturnTypeWillChange]

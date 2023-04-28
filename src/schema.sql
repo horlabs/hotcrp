@@ -346,6 +346,7 @@ CREATE TABLE `PaperReview` (
   `timeApprovalRequested` bigint(11) NOT NULL DEFAULT 0,
   `reviewNeedsSubmit` tinyint(1) NOT NULL DEFAULT 1,
   `reviewViewScore` tinyint(2) NOT NULL DEFAULT -3,
+  `reviewFlags` int(1) NOT NULL DEFAULT 0,
 
   `timeRequested` bigint(11) NOT NULL DEFAULT 0,
   `timeRequestNotified` bigint(11) NOT NULL DEFAULT 0,
@@ -405,6 +406,7 @@ CREATE TABLE `PaperReviewHistory` (
   `reviewNotified` bigint(1) DEFAULT NULL,
   `reviewAuthorNotified` bigint(11) NOT NULL,
   `reviewEditVersion` int(1) NOT NULL,
+  `reviewFlags` int(1) NOT NULL,
   `revdelta` longblob DEFAULT NULL,
 
   PRIMARY KEY (`paperId`,`reviewId`,`reviewTime`)
@@ -615,7 +617,7 @@ CREATE TABLE `TopicInterest` (
 
 
 
-insert into Settings (name, value) values ('allowPaperOption', 273);
+insert into Settings (name, value) values ('allowPaperOption', 274);
 insert into Settings (name, value) values ('setupPhase', 1);
 -- there are no submissions yet
 insert into Settings (name, value) values ('no_papersub', 1);

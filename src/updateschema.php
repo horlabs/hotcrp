@@ -918,6 +918,37 @@ set ordinal=(t.maxOrdinal+1) where commentId={$row[1]}");
     }
 
     /** @return bool */
+    function v274_paper_review_flags() {
+        if (!$this->conf->ql_ok("alter table PaperReview add `reviewFlags` int(1) NOT NULL DEFAULT 0")
+            || !$this->conf->ql_ok("alter table PaperReviewHistory add `reviewFlags` int(1) NOT NULL DEFAULT 0")) {
+            return false;
+        }
+
+        $result = $this->conf->ql_ok("select paperId, reviewId, reviewTime, reviewModified, reviewAuthorSeen, reviewAuthorNotified from PaperReviewHistory order by paperId asc, reviewId asc, reviewTime asc");
+        $ppid = $prid = 0;
+        $pseen = false;
+        $cleanf = Dbl::make_multi_ql_stager($this->conf->dblink);
+        while (($row = $result->fetch_object())) {
+            $pid = (int) $row->paperId;
+            $rid = (int) $row->reviewId;
+            $rtime = (int) $row->reviewTime;
+            if ($pid !== $ppid || $rid !== $prid) {
+                $ppid = $pid;
+                $prid = $rid;
+                $pseen = false;
+            }
+            if ((!$pseen && (int) $row->reviewAuthorSeen > 0)
+                || ((int) $row->reviewModified === (int) $row->reviewAuthorNotified)) {
+                $cleanf("update PaperReviewHistory set reviewFlags=1 where paperId=? and reviewId=? and reviewTime=?", $pid, $rid, $rtime);
+            }
+        }
+        $cleanf(null);
+
+        return $this->conf->ql_ok("update PaperReview set reviewFlags=5 where reviewAuthorSeen>0")
+            && $this->conf->ql_ok("alter table PaperReviewHistory change `reviewFlags` `reviewFlags` int(1) NOT NULL");
+    }
+
+    /** @return bool */
     function run() {
         $conf = $this->conf;
 
@@ -2619,6 +2650,10 @@ set ordinal=(t.maxOrdinal+1) where commentId={$row[1]}");
             && $conf->ql_ok("update PaperStorage set size=-1 where size is null or (size=0 and sha1!=x'da39a3ee5e6b4b0d3255bfef95601890afd80709' and sha1!=x'736861322de3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')")
             && $conf->ql_ok("alter table PaperStorage change `size` `size` bigint(11) NOT NULL DEFAULT -1")) {
             $conf->update_schema_version(273);
+        }
+        if ($conf->sversion === 273
+            && $this->v274_paper_review_flags()) {
+            $conf->update_schema_version(274);
         }
 
         $conf->ql_ok("delete from Settings where name='__schema_lock'");

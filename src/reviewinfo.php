@@ -44,6 +44,8 @@ class ReviewInfo implements JsonSerializable {
     /** @var int */
     private $reviewViewScore;
     /** @var int */
+    private $reviewFlags;
+    /** @var int */
     public $reviewStatus;
 
     // sometimes loaded
@@ -110,6 +112,10 @@ class ReviewInfo implements JsonSerializable {
     private $_diff;
 
     const VIEWSCORE_RECOMPUTE = -100;
+
+    const RF_SEEN = 1;
+    const RF_EDITED = 2;
+    const RF_RECOMPUTE_EDITED = 4;
 
     const RS_EMPTY = 0;
     const RS_ACCEPTED = 1;
@@ -216,6 +222,7 @@ class ReviewInfo implements JsonSerializable {
         $rrow->timeApprovalRequested = 0;
         $rrow->reviewNeedsSubmit = 0;
         $rrow->reviewViewScore = -3;
+        $rrow->reviewFlags = 0;
         $rrow->reviewStatus = self::RS_EMPTY;
         $rrow->fields = $rrow->conf->review_form()->order_array(null);
         return $rrow;
@@ -246,6 +253,7 @@ class ReviewInfo implements JsonSerializable {
         $this->timeApprovalRequested = (int) $this->timeApprovalRequested;
         $this->reviewNeedsSubmit = (int) $this->reviewNeedsSubmit;
         $this->reviewViewScore = (int) $this->reviewViewScore;
+        $this->reviewFlags = (int) $this->reviewFlags;
         $this->reviewStatus = $this->compute_review_status();
 
         if ($this->timeRequested !== null) {
@@ -313,7 +321,7 @@ class ReviewInfo implements JsonSerializable {
             if ($f->order && $f->main_storage)
                 $t .= ", ' {$f->order}=', {$f->main_storage}";
         }
-        return "group_concat($t order by r.reviewId)";
+        return "group_concat({$t} order by r.reviewId)";
     }
 
     /** @param string $signature
